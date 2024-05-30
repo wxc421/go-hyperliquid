@@ -165,6 +165,13 @@ type UpdateLeverageAction struct {
 	Leverage int    `msgpack:"leverage" json:"leverage"`
 }
 
+type DefaultExchangeResponse struct {
+	Status   string `json:"status"`
+	Response struct {
+		Type string `json:"type"`
+	} `json:"response"`
+}
+
 // Depending on Type this struct can has different non-nil fields
 type NonFundingDelta struct {
 	Type   string  `json:"type"`

@@ -10,6 +10,10 @@ type Hyperliquid struct {
 	InfoAPI
 }
 
+// HyperliquidClientConfig is a configuration struct for Hyperliquid API.
+// PrivateKey can be empty if you only need to use the public endpoints.
+// AccountAddress is the default account address for the API that can be changed with SetAccountAddress().
+// AccountAddress may be different from the address build from the private key due to Hyperliquid's account system.
 type HyperliquidClientConfig struct {
 	IsMainnet      bool
 	PrivateKey     string

@@ -252,7 +252,7 @@ func (api *ExchangeAPI) CancelAllOrders() (*CancelOrderResponse, error) {
 
 // Update leverage for a coin
 // https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#update-leverage
-func (api *ExchangeAPI) UpdateLeverage(coin string, isCross bool, leverage int) (any, error) {
+func (api *ExchangeAPI) UpdateLeverage(coin string, isCross bool, leverage int) (*DefaultExchangeResponse, error) {
 	timestamp := GetNonce()
 	action := UpdateLeverageAction{
 		Type:     "updateLeverage",
@@ -271,7 +271,7 @@ func (api *ExchangeAPI) UpdateLeverage(coin string, isCross bool, leverage int) 
 		Signature:    ToTypedSig(r, s, v),
 		VaultAddress: nil,
 	}
-	return MakeUniversalRequest[map[string]any](api, request)
+	return MakeUniversalRequest[DefaultExchangeResponse](api, request)
 }
 
 // Initiate a withdraw request

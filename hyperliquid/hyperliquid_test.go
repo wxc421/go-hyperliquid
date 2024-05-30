@@ -25,7 +25,7 @@ func TestHyperliquid_CheckFieldsConsistency(t *testing.T) {
 	if hl.InfoAPI.baseEndpoint != "/info" {
 		t.Errorf("baseEndpoint = %v, want %v", hl.InfoAPI.baseEndpoint, "/info")
 	}
-	if hl.InfoAPI.baseUrl != "https://api.hyperliquid.com" {
+	if hl.InfoAPI.baseUrl != "https://api.hyperliquid.xyz" {
 		t.Errorf("baseUrl = %v, want %v", hl.InfoAPI.baseUrl, "https://api.hyperliquid.com")
 	}
 	hl.SetDebugActive()

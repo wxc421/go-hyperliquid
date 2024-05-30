@@ -48,10 +48,18 @@ func TestExchangeAPI_isMainnet(testing *testing.T) {
 
 func TestExchangeAPI_UpdateLeverage(testing *testing.T) {
 	exchangeAPI := GetExchangeAPI()
-	_, err := exchangeAPI.UpdateLeverage("ETH", true, 4)
+	_, err := exchangeAPI.UpdateLeverage("ETH", true, 20)
 	if err != nil {
 		testing.Errorf("UpdateLeverage() error = %v", err)
 	}
+	// Set incorrect leverage 2000
+	_, err = exchangeAPI.UpdateLeverage("ETH", true, 2000)
+	if err == nil {
+		testing.Errorf("UpdateLeverage() error = %v", err)
+	} else if err.Error() != "Invalid leverage value" {
+		testing.Errorf("UpdateLeverage() error = %v expected Invalid leverage value", err)
+	}
+	testing.Logf("UpdateLeverage() = %v", err)
 }
 
 func TestExchangeAPI_MarketOpen(testing *testing.T) {
