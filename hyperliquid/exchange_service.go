@@ -36,6 +36,7 @@ type ExchangeAPI struct {
 	address      string
 	baseEndpoint string
 	meta         map[string]AssetInfo
+	spotMeta     map[string]AssetInfo
 }
 
 // NewExchangeAPI creates a new default ExchangeAPI.
@@ -54,6 +55,14 @@ func NewExchangeAPI(isMainnet bool) *ExchangeAPI {
 		api.debug("Error building meta map: %s", err)
 	}
 	api.meta = meta
+
+	spotMeta, err := api.infoAPI.BuildSpotMetaMap()
+	if err != nil {
+		api.SetDebugActive()
+		api.debug("Error building spot meta map: %s", err)
+	}
+	api.spotMeta = spotMeta
+
 	return &api
 }
 
@@ -69,6 +78,17 @@ func (api *ExchangeAPI) SlippagePrice(coin string, isBuy bool, slippage float64)
 		return 0.0
 	}
 	return CalculateSlippage(isBuy, marketPx, slippage)
+}
+
+// SlippagePriceSpot is a helper function to calculate the slippage price for a spot coin.
+func (api *ExchangeAPI) SlippagePriceSpot(coin string, isBuy bool, slippage float64) float64 {
+	marketPx, err := api.infoAPI.GetSpotMarketPx(coin)
+	if err != nil {
+		api.debug("Error getting market price: %s", err)
+		return 0.0
+	}
+	slippagePrice := CalculateSlippage(isBuy, marketPx, slippage)
+	return slippagePrice
 }
 
 // Open a market order.
@@ -96,6 +116,34 @@ func (api *ExchangeAPI) MarketOrder(coin string, size float64, slippage *float64
 		ReduceOnly: false,
 	}
 	return api.Order(orderRequest, GroupingNa)
+}
+
+// MarketOrderSpot is a market order for a spot coin.
+// It is used to buy/sell a spot coin.
+// Limit order with TIF=IOC and px=market price * (1 +- slippage).
+// Size determines the amount of the coin to buy/sell.
+//
+//	MarketOrderSpot("HYPE", 0.1, nil) // Buy 0.1 HYPE
+//	MarketOrderSpot("HYPE", -0.1, nil) // Sell 0.1 HYPE
+//	MarketOrderSpot("HYPE", 0.1, &slippage) // Buy 0.1 HYPE with slippage
+func (api *ExchangeAPI) MarketOrderSpot(coin string, size float64, slippage *float64) (*PlaceOrderResponse, error) {
+	slpg := GetSlippage(slippage)
+	isBuy := IsBuy(size)
+	finalPx := api.SlippagePriceSpot(coin, isBuy, slpg)
+	orderType := OrderType{
+		Limit: &LimitOrderType{
+			Tif: TifIoc,
+		},
+	}
+	orderRequest := OrderRequest{
+		Coin:       coin,
+		IsBuy:      isBuy,
+		Sz:         math.Abs(size),
+		LimitPx:    finalPx,
+		OrderType:  orderType,
+		ReduceOnly: false,
+	}
+	return api.OrderSpot(orderRequest, GroupingNa)
 }
 
 // Open a limit order.
@@ -165,15 +213,26 @@ func (api *ExchangeAPI) ClosePosition(coin string) (*PlaceOrderResponse, error) 
 
 // Place single order
 func (api *ExchangeAPI) Order(request OrderRequest, grouping Grouping) (*PlaceOrderResponse, error) {
-	return api.BulkOrders([]OrderRequest{request}, grouping)
+	return api.BulkOrders([]OrderRequest{request}, grouping, false)
+}
+
+// OrderSpot places a spot order
+func (api *ExchangeAPI) OrderSpot(request OrderRequest, grouping Grouping) (*PlaceOrderResponse, error) {
+	return api.BulkOrders([]OrderRequest{request}, grouping, true)
 }
 
 // Place orders in bulk
 // https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#place-an-order
-func (api *ExchangeAPI) BulkOrders(requests []OrderRequest, grouping Grouping) (*PlaceOrderResponse, error) {
+func (api *ExchangeAPI) BulkOrders(requests []OrderRequest, grouping Grouping, isSpot bool) (*PlaceOrderResponse, error) {
 	var wires []OrderWire
+	var meta map[string]AssetInfo
+	if isSpot {
+		meta = api.spotMeta
+	} else {
+		meta = api.meta
+	}
 	for _, req := range requests {
-		wires = append(wires, OrderRequestToWire(req, api.meta))
+		wires = append(wires, OrderRequestToWire(req, meta, isSpot))
 	}
 	timestamp := GetNonce()
 	action := OrderWiresToOrderAction(wires, grouping)
@@ -283,7 +342,7 @@ func (api *ExchangeAPI) Withdraw(destination string, amount float64) (*WithdrawR
 	action := WithdrawAction{
 		Type:        "withdraw3",
 		Destination: destination,
-		Amount:      FloatToWire(amount, &SZ_DECIMALS),
+		Amount:      FloatToWire(amount, PERP_MAX_DECIMALS, SZ_DECIMALS),
 		Time:        nonce,
 	}
 	signatureChainID, chainType := api.getChainParams()
@@ -315,7 +374,7 @@ func (api *ExchangeAPI) getChainParams() (string, string) {
 func (api *ExchangeAPI) BuildBulkOrdersEIP712(requests []OrderRequest, grouping Grouping) (apitypes.TypedData, error) {
 	var wires []OrderWire
 	for _, req := range requests {
-		wires = append(wires, OrderRequestToWire(req, api.meta))
+		wires = append(wires, OrderRequestToWire(req, api.meta, false))
 	}
 	timestamp := GetNonce()
 	action := OrderWiresToOrderAction(wires, grouping)

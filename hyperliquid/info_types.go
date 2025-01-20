@@ -54,6 +54,25 @@ type Position struct {
 	} `json:"cumFunding"`
 }
 
+type UserStateSpot struct {
+	Balances []SpotAssetPosition `json:"balances"`
+}
+
+type SpotAssetPosition struct {
+	/*
+			 "coin": "USDC",
+		            "token": 0,
+		            "hold": "0.0",
+		            "total": "14.625485",
+		            "entryNtl": "0.0"
+	*/
+	Coin     string  `json:"coin"`
+	Token    int     `json:"token"`
+	Hold     float64 `json:"hold,string"`
+	Total    float64 `json:"total,string"`
+	EntryNtl float64 `json:"entryNtl,string"`
+}
+
 type Order struct {
 	Children         []any   `json:"children,omitempty"`
 	Cloid            string  `json:"cloid,omitempty"`
@@ -83,6 +102,25 @@ type MarginSummary struct {
 	TotalMarginUsed float64 `json:"totalMarginUsed,string"`
 	TotalNtlPos     float64 `json:"totalNtlPos,string"`
 	TotalRawUsd     float64 `json:"totalRawUsd,string"`
+}
+
+type SpotMeta struct {
+	Universe []struct {
+		Tokens      []int  `json:"tokens"`
+		Name        string `json:"name"`
+		Index       int    `json:"index"`
+		IsCanonical bool   `json:"isCanonical"`
+	} `json:"universe"`
+	Tokens []struct {
+		Name        string `json:"name"`
+		SzDecimals  int    `json:"szDecimals"`
+		WeiDecimals int    `json:"weiDecimals"`
+		Index       int    `json:"index"`
+		TokenID     string `json:"tokenId"`
+		IsCanonical bool   `json:"isCanonical"`
+		EvmContract any    `json:"evmContract"`
+		FullName    any    `json:"fullName"`
+	} `json:"tokens"`
 }
 
 type Meta struct {
@@ -178,4 +216,17 @@ type RatesLimits struct {
 	CumVlm        float64 `json:"cumVlm,string"`
 	NRequestsUsed int     `json:"nRequestsUsed"`
 	NRequestsCap  int     `json:"nRequestsCap"`
+}
+
+type SpotMetaAndAssetCtxsResponse [2]interface{} // Array of exactly 2 elements
+
+type Market struct {
+	PrevDayPx         string `json:"prevDayPx,omitempty"`
+	DayNtlVlm         string `json:"dayNtlVlm,omitempty"`
+	MarkPx            string `json:"markPx,omitempty"`
+	MidPx             string `json:"midPx,omitempty"`
+	CirculatingSupply string `json:"circulatingSupply,omitempty"`
+	Coin              string `json:"coin,omitempty"`
+	TotalSupply       string `json:"totalSupply,omitempty"`
+	DayBaseVlm        string `json:"dayBaseVlm,omitempty"`
 }
