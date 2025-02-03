@@ -28,6 +28,7 @@ type OrderRequest struct {
 	LimitPx    float64   `json:"limit_px"`
 	OrderType  OrderType `json:"order_type"`
 	ReduceOnly bool      `json:"reduce_only"`
+	Cloid      string    `json:"cloid,omitempty"`
 }
 
 type OrderType struct {
@@ -145,6 +146,16 @@ type CancelOidWire struct {
 	Oid   int `msgpack:"o" json:"o"`
 }
 
+type CancelCloidWire struct {
+	Asset int    `msgpack:"asset" json:"asset"`
+	Cloid string `msgpack:"cloid" json:"cloid"`
+}
+
+type CancelCloidOrderAction struct {
+	Type    string            `msgpack:"type" json:"type"`
+	Cancels []CancelCloidWire `msgpack:"cancels" json:"cancels"`
+}
+
 type CancelOrderResponse struct {
 	Status   string              `json:"status"`
 	Response InnerCancelResponse `json:"response"`
@@ -160,7 +171,8 @@ type CancelResponseStatuses struct {
 }
 
 type RestingStatus struct {
-	OrderId int `json:"oid"`
+	OrderId int    `json:"oid"`
+	Cloid   string `json:"cloid,omitempty"`
 }
 
 type CloseRequest struct {
@@ -175,6 +187,7 @@ type FilledStatus struct {
 	OrderId int     `json:"oid"`
 	AvgPx   float64 `json:"avgPx,string"`
 	TotalSz float64 `json:"totalSz,string"`
+	Cloid   string  `json:"cloid,omitempty"`
 }
 
 type Liquidation struct {
