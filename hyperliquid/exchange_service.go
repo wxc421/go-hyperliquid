@@ -12,10 +12,10 @@ type IExchangeAPI interface {
 	IClient
 
 	// Open orders
-	BulkOrders(requests []OrderRequest, grouping Grouping) (*PlaceOrderResponse, error)
-	Order(request OrderRequest, grouping Grouping) (*PlaceOrderResponse, error)
-	MarketOrder(coin string, size float64, slippage *float64, clientOID ...string) (*PlaceOrderResponse, error)
-	LimitOrder(orderType string, coin string, size float64, px float64, isBuy bool, reduceOnly bool, clientOID ...string) (*PlaceOrderResponse, error)
+	BulkOrders(requests []OrderRequest, grouping Grouping) (*OrderResponse, error)
+	Order(request OrderRequest, grouping Grouping) (*OrderResponse, error)
+	MarketOrder(coin string, size float64, slippage *float64, clientOID ...string) (*OrderResponse, error)
+	LimitOrder(orderType string, coin string, size float64, px float64, isBuy bool, reduceOnly bool, clientOID ...string) (*OrderResponse, error)
 
 	// Order management
 	CancelOrderByOID(coin string, orderID int) (any, error)
@@ -23,7 +23,7 @@ type IExchangeAPI interface {
 	BulkCancelOrders(cancels []CancelOidWire) (any, error)
 	CancelAllOrdersByCoin(coin string) (any, error)
 	CancelAllOrders() (any, error)
-	ClosePosition(coin string) (*PlaceOrderResponse, error)
+	ClosePosition(coin string) (*OrderResponse, error)
 
 	// Account management
 	Withdraw(destination string, amount float64) (*WithdrawResponse, error)
@@ -99,7 +99,7 @@ func (api *ExchangeAPI) SlippagePriceSpot(coin string, isBuy bool, slippage floa
 //	MarketOrder("BTC", 0.1, nil) // Buy 0.1 BTC
 //	MarketOrder("BTC", -0.1, nil) // Sell 0.1 BTC
 //	MarketOrder("BTC", 0.1, &slippage) // Buy 0.1 BTC with slippage
-func (api *ExchangeAPI) MarketOrder(coin string, size float64, slippage *float64, clientOID ...string) (*PlaceOrderResponse, error) {
+func (api *ExchangeAPI) MarketOrder(coin string, size float64, slippage *float64, clientOID ...string) (*OrderResponse, error) {
 	slpg := GetSlippage(slippage)
 	isBuy := IsBuy(size)
 	finalPx := api.SlippagePrice(coin, isBuy, slpg)
@@ -130,7 +130,7 @@ func (api *ExchangeAPI) MarketOrder(coin string, size float64, slippage *float64
 //	MarketOrderSpot("HYPE", 0.1, nil) // Buy 0.1 HYPE
 //	MarketOrderSpot("HYPE", -0.1, nil) // Sell 0.1 HYPE
 //	MarketOrderSpot("HYPE", 0.1, &slippage) // Buy 0.1 HYPE with slippage
-func (api *ExchangeAPI) MarketOrderSpot(coin string, size float64, slippage *float64) (*PlaceOrderResponse, error) {
+func (api *ExchangeAPI) MarketOrderSpot(coin string, size float64, slippage *float64) (*OrderResponse, error) {
 	slpg := GetSlippage(slippage)
 	isBuy := IsBuy(size)
 	finalPx := api.SlippagePriceSpot(coin, isBuy, slpg)
@@ -154,7 +154,7 @@ func (api *ExchangeAPI) MarketOrderSpot(coin string, size float64, slippage *flo
 // Order type can be Gtc, Ioc, Alo.
 // Size determines the amount of the coin to buy/sell.
 // See the constants TifGtc, TifIoc, TifAlo.
-func (api *ExchangeAPI) LimitOrder(orderType string, coin string, size float64, px float64, reduceOnly bool, clientOID ...string) (*PlaceOrderResponse, error) {
+func (api *ExchangeAPI) LimitOrder(orderType string, coin string, size float64, px float64, reduceOnly bool, clientOID ...string) (*OrderResponse, error) {
 	// check if the order type is valid
 	if orderType != TifGtc && orderType != TifIoc && orderType != TifAlo {
 		return nil, APIError{Message: fmt.Sprintf("Invalid order type: %s. Available types: %s, %s, %s", orderType, TifGtc, TifIoc, TifAlo)}
@@ -179,7 +179,7 @@ func (api *ExchangeAPI) LimitOrder(orderType string, coin string, size float64, 
 }
 
 // Close all positions for a given coin. They are closing with a market order.
-func (api *ExchangeAPI) ClosePosition(coin string) (*PlaceOrderResponse, error) {
+func (api *ExchangeAPI) ClosePosition(coin string) (*OrderResponse, error) {
 	// Get all positions and find the one for the coin
 	// Then just make MarketOpen with the reverse size
 	state, err := api.infoAPI.GetUserState(api.AccountAddress())
@@ -219,18 +219,18 @@ func (api *ExchangeAPI) ClosePosition(coin string) (*PlaceOrderResponse, error) 
 }
 
 // Place single order
-func (api *ExchangeAPI) Order(request OrderRequest, grouping Grouping) (*PlaceOrderResponse, error) {
+func (api *ExchangeAPI) Order(request OrderRequest, grouping Grouping) (*OrderResponse, error) {
 	return api.BulkOrders([]OrderRequest{request}, grouping, false)
 }
 
 // OrderSpot places a spot order
-func (api *ExchangeAPI) OrderSpot(request OrderRequest, grouping Grouping) (*PlaceOrderResponse, error) {
+func (api *ExchangeAPI) OrderSpot(request OrderRequest, grouping Grouping) (*OrderResponse, error) {
 	return api.BulkOrders([]OrderRequest{request}, grouping, true)
 }
 
 // Place orders in bulk
 // https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#place-an-order
-func (api *ExchangeAPI) BulkOrders(requests []OrderRequest, grouping Grouping, isSpot bool) (*PlaceOrderResponse, error) {
+func (api *ExchangeAPI) BulkOrders(requests []OrderRequest, grouping Grouping, isSpot bool) (*OrderResponse, error) {
 	var wires []OrderWire
 	var meta map[string]AssetInfo
 	if isSpot {
@@ -254,12 +254,12 @@ func (api *ExchangeAPI) BulkOrders(requests []OrderRequest, grouping Grouping, i
 		Signature:    ToTypedSig(r, s, v),
 		VaultAddress: nil,
 	}
-	return MakeUniversalRequest[PlaceOrderResponse](api, request)
+	return MakeUniversalRequest[OrderResponse](api, request)
 }
 
 // Cancel order(s)
 // https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#cancel-order-s
-func (api *ExchangeAPI) BulkCancelOrders(cancels []CancelOidWire) (*CancelOrderResponse, error) {
+func (api *ExchangeAPI) BulkCancelOrders(cancels []CancelOidWire) (*OrderResponse, error) {
 	timestamp := GetNonce()
 	action := CancelOidOrderAction{
 		Type:    "cancel",
@@ -276,12 +276,12 @@ func (api *ExchangeAPI) BulkCancelOrders(cancels []CancelOidWire) (*CancelOrderR
 		Signature:    ToTypedSig(r, s, v),
 		VaultAddress: nil,
 	}
-	return MakeUniversalRequest[CancelOrderResponse](api, request)
+	return MakeUniversalRequest[OrderResponse](api, request)
 }
 
 // Bulk modify orders
 // https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#modify-multiple-orders
-func (api *ExchangeAPI) BulkModifyOrders(modifyRequests []ModifyOrderRequest, isSpot bool) (*PlaceOrderResponse, error) {
+func (api *ExchangeAPI) BulkModifyOrders(modifyRequests []ModifyOrderRequest, isSpot bool) (*OrderResponse, error) {
 	wires := []ModifyOrderWire{}
 
 	for _, req := range modifyRequests {
@@ -303,17 +303,17 @@ func (api *ExchangeAPI) BulkModifyOrders(modifyRequests []ModifyOrderRequest, is
 		Signature:    ToTypedSig(rVal, sVal, vVal),
 		VaultAddress: nil,
 	}
-	return MakeUniversalRequest[PlaceOrderResponse](api, request)
+	return MakeUniversalRequest[OrderResponse](api, request)
 }
 
 // Cancel exact order by OID
-func (api *ExchangeAPI) CancelOrderByOID(coin string, orderID int64) (*CancelOrderResponse, error) {
+func (api *ExchangeAPI) CancelOrderByOID(coin string, orderID int64) (*OrderResponse, error) {
 	return api.BulkCancelOrders([]CancelOidWire{{Asset: api.meta[coin].AssetId, Oid: int(orderID)}})
 }
 
 // Cancel exact order by Client Order Id
 // https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#cancel-order-s-by-cloid
-func (api *ExchangeAPI) CancelOrderByCloid(coin string, clientOID string) (*CancelOrderResponse, error) {
+func (api *ExchangeAPI) CancelOrderByCloid(coin string, clientOID string) (*OrderResponse, error) {
 	timestamp := GetNonce()
 	action := CancelCloidOrderAction{
 		Type: "cancelByCloid",
@@ -335,11 +335,11 @@ func (api *ExchangeAPI) CancelOrderByCloid(coin string, clientOID string) (*Canc
 		Signature:    ToTypedSig(r, s, v),
 		VaultAddress: nil,
 	}
-	return MakeUniversalRequest[CancelOrderResponse](api, request)
+	return MakeUniversalRequest[OrderResponse](api, request)
 }
 
 // Cancel all orders for a given coin
-func (api *ExchangeAPI) CancelAllOrdersByCoin(coin string) (*CancelOrderResponse, error) {
+func (api *ExchangeAPI) CancelAllOrdersByCoin(coin string) (*OrderResponse, error) {
 	orders, err := api.infoAPI.GetOpenOrders(api.AccountAddress())
 	if err != nil {
 		api.debug("Error getting orders: %s", err)
@@ -356,7 +356,7 @@ func (api *ExchangeAPI) CancelAllOrdersByCoin(coin string) (*CancelOrderResponse
 }
 
 // Cancel all open orders
-func (api *ExchangeAPI) CancelAllOrders() (*CancelOrderResponse, error) {
+func (api *ExchangeAPI) CancelAllOrders() (*OrderResponse, error) {
 	orders, err := api.infoAPI.GetOpenOrders(api.AccountAddress())
 	if err != nil {
 		api.debug("Error getting orders: %s", err)
