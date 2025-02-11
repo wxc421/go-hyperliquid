@@ -77,8 +77,8 @@ type OrderWire struct {
 	Cloid      string        `msgpack:"c,omitempty" json:"c,omitempty"`
 }
 type ModifyResponse struct {
-	Status   string                  `json:"status"`
-	Response PlaceOrderInnerResponse `json:"response"`
+	Status   string             `json:"status"`
+	Response OrderInnerResponse `json:"response"`
 }
 type ModifyOrderWire struct {
 	OrderId int       `msgpack:"oid" json:"oid"`
@@ -111,12 +111,12 @@ type PlaceOrderAction struct {
 	Grouping Grouping    `msgpack:"grouping" json:"grouping"`
 }
 
-type PlaceOrderResponse struct {
-	Status   string                  `json:"status"`
-	Response PlaceOrderInnerResponse `json:"response"`
+type OrderResponse struct {
+	Status   string             `json:"status"`
+	Response OrderInnerResponse `json:"response"`
 }
 
-type PlaceOrderInnerResponse struct {
+type OrderInnerResponse struct {
 	Type string       `json:"type"`
 	Data DataResponse `json:"data"`
 }
@@ -154,20 +154,6 @@ type CancelCloidWire struct {
 type CancelCloidOrderAction struct {
 	Type    string            `msgpack:"type" json:"type"`
 	Cancels []CancelCloidWire `msgpack:"cancels" json:"cancels"`
-}
-
-type CancelOrderResponse struct {
-	Status   string              `json:"status"`
-	Response InnerCancelResponse `json:"response"`
-}
-
-type InnerCancelResponse struct {
-	Type string                 `json:"type"`
-	Data CancelResponseStatuses `json:"data"`
-}
-
-type CancelResponseStatuses struct {
-	Statuses []string `json:"statuses"`
 }
 
 type RestingStatus struct {
