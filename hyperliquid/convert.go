@@ -57,8 +57,8 @@ func OrderRequestToWire(req OrderRequest, meta map[string]AssetInfo, isSpot bool
 	return OrderWire{
 		Asset:      assetId,
 		IsBuy:      req.IsBuy,
-		LimitPx:    RoundOrderPrice(req.LimitPx, info.SzDecimals, maxDecimals),
-		SizePx:     RoundOrderSize(req.Sz, info.SzDecimals),
+		LimitPx:    PriceToWire(req.LimitPx, maxDecimals, info.SzDecimals),
+		SizePx:     SizeToWire(req.Sz, info.SzDecimals),
 		ReduceOnly: req.ReduceOnly,
 		OrderType:  OrderTypeToWire(req.OrderType),
 		Cloid:      req.Cloid,
@@ -81,8 +81,8 @@ func ModifyOrderRequestToWire(req ModifyOrderRequest, meta map[string]AssetInfo,
 		Order: OrderWire{
 			Asset:      assetId,
 			IsBuy:      req.IsBuy,
-			LimitPx:    RoundOrderPrice(req.LimitPx, info.SzDecimals, maxDecimals),
-			SizePx:     RoundOrderSize(req.Sz, info.SzDecimals),
+			LimitPx:    PriceToWire(req.LimitPx, maxDecimals, info.SzDecimals),
+			SizePx:     SizeToWire(req.Sz, info.SzDecimals),
 			ReduceOnly: req.ReduceOnly,
 			OrderType:  OrderTypeToWire(req.OrderType),
 		},
@@ -135,6 +135,90 @@ func FloatToWire(x float64, maxDecimals int, szDecimals int) string {
 	return rounded
 }
 
+// fastPow10 returns 10^exp as a float64. For our purposes exp is small.
+func pow10(exp int) float64 {
+	var res float64 = 1
+	for i := 0; i < exp; i++ {
+		res *= 10
+	}
+	return res
+}
+
+// PriceToWire converts a price value to its string representation per Hyperliquid rules.
+// It enforces:
+//   - At most 5 significant figures,
+//   - And no more than (maxDecimals - szDecimals) decimal places.
+//
+// Integer prices are returned as is.
+func PriceToWire(x float64, maxDecimals, szDecimals int) string {
+	// If the price is an integer, return it without decimals.
+	if x == math.Trunc(x) {
+		return strconv.FormatInt(int64(x), 10)
+	}
+
+	// Rule 1: The tick rule – maximum decimals allowed is (maxDecimals - szDecimals).
+	allowedTick := maxDecimals - szDecimals
+
+	// Rule 2: The significant figures rule – at most 5 significant digits.
+	var allowedSig int
+	if x >= 1 {
+		// Count digits in the integer part.
+		digits := int(math.Floor(math.Log10(x))) + 1
+		allowedSig = 5 - digits
+		if allowedSig < 0 {
+			allowedSig = 0
+		}
+	} else {
+		// For x < 1, determine the effective exponent.
+		exponent := int(math.Ceil(-math.Log10(x)))
+		allowedSig = 4 + exponent
+	}
+
+	// Final allowed decimals is the minimum of the tick rule and the significant figures rule.
+	allowedDecimals := allowedTick
+	if allowedSig < allowedDecimals {
+		allowedDecimals = allowedSig
+	}
+	if allowedDecimals < 0 {
+		allowedDecimals = 0
+	}
+
+	// Round the price to allowedDecimals decimals.
+	factor := pow10(allowedDecimals)
+	rounded := math.Round(x*factor) / factor
+
+	// Format the number with fixed precision.
+	s := strconv.FormatFloat(rounded, 'f', allowedDecimals, 64)
+	// Only trim trailing zeros if the formatted string contains a decimal point.
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(s, "0")
+		s = strings.TrimRight(s, ".")
+	}
+	return s
+}
+
+// SizeToWire converts a size value to its string representation,
+// rounding it to exactly szDecimals decimals.
+// Integer sizes are returned without decimals.
+func SizeToWire(x float64, szDecimals int) string {
+	// Return integer sizes without decimals.
+	if szDecimals == 0 {
+		return strconv.FormatInt(int64(x), 10)
+	}
+	// Return integer sizes directly.
+	if x == math.Trunc(x) {
+		return strconv.FormatInt(int64(x), 10)
+	}
+
+	// Round the size value to szDecimals decimals.
+	factor := pow10(szDecimals)
+	rounded := math.Round(x*factor) / factor
+
+	// Format with fixed precision then trim any trailing zeros and the decimal point.
+	s := strconv.FormatFloat(rounded, 'f', szDecimals, 64)
+	return strings.TrimRight(strings.TrimRight(s, "0"), ".")
+}
+
 // To sign raw messages via EIP-712
 func StructToMap(strct any) (res map[string]interface{}, err error) {
 	a, err := json.Marshal(strct)
@@ -143,39 +227,4 @@ func StructToMap(strct any) (res map[string]interface{}, err error) {
 	}
 	json.Unmarshal(a, &res)
 	return res, nil
-}
-
-// Round the order size to the nearest tick size
-func RoundOrderSize(x float64, szDecimals int) string {
-	newX := math.Round(x*math.Pow10(szDecimals)) / math.Pow10(szDecimals)
-	// TODO: add rounding
-	return big.NewFloat(newX).Text('f', szDecimals)
-}
-
-// Round the order price to the nearest tick size
-func RoundOrderPrice(x float64, szDecimals int, maxDecimals int) string {
-	maxSignFigures := 5
-	allowedDecimals := maxDecimals - szDecimals
-	numberOfDigitsInIntegerPart := len(strconv.Itoa(int(x)))
-	if numberOfDigitsInIntegerPart >= maxSignFigures {
-		return RoundOrderSize(x, 0)
-	}
-	allowedSignFigures := maxSignFigures - numberOfDigitsInIntegerPart
-	if x < 1 {
-		text := RoundOrderSize(x, allowedDecimals)
-		startSignFigures := false
-		for i := 2; i < len(text); i++ {
-			if text[i] == '0' && !startSignFigures {
-				continue
-			}
-			startSignFigures = true
-			allowedSignFigures--
-			if allowedSignFigures == 0 {
-				return text[:i+1]
-			}
-		}
-		return text
-	} else {
-		return RoundOrderSize(x, min(allowedSignFigures, allowedDecimals))
-	}
 }

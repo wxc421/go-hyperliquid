@@ -6,7 +6,7 @@ import (
 )
 
 func GetInfoAPI() *InfoAPI {
-	api := NewInfoAPI(true)
+	api := NewInfoAPI(false)
 	if GLOBAL_DEBUG {
 		api.SetDebugActive()
 	}
@@ -128,8 +128,8 @@ func TestInfoAPI_GetMeta(t *testing.T) {
 		t.Errorf("GetMeta() error = %v", err)
 	}
 	t.Logf("GetMeta() = %v", res)
-	if res.Universe[0].Name != "BTC" {
-		t.Errorf("GetMeta() doesnt return %v, want %v", res.Universe[0].Name, "BTC")
+	if res.Universe[0].Name != "SOL" {
+		t.Errorf("GetMeta() doesnt return %v, want %v", res.Universe[0].Name, "SOL")
 	}
 }
 

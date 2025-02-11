@@ -25,27 +25,32 @@ func TestHyperliquid_CheckFieldsConsistency(t *testing.T) {
 	if hl.InfoAPI.baseEndpoint != "/info" {
 		t.Errorf("baseEndpoint = %v, want %v", hl.InfoAPI.baseEndpoint, "/info")
 	}
-	if hl.InfoAPI.baseUrl != "https://api.hyperliquid.xyz" {
-		t.Errorf("baseUrl = %v, want %v", hl.InfoAPI.baseUrl, "https://api.hyperliquid.com")
+	var apiUrl string
+	if hl.ExchangeAPI.IsMainnet() {
+		apiUrl = MAINNET_API_URL
+	} else {
+		apiUrl = TESTNET_API_URL
+	}
+	if hl.InfoAPI.baseUrl != apiUrl {
+		t.Errorf("baseUrl = %v, want %v", hl.InfoAPI.baseUrl, apiUrl)
 	}
 	hl.SetDebugActive()
 	if hl.InfoAPI.Debug != hl.ExchangeAPI.Debug {
 		t.Errorf("debug = %v, want %v", hl.InfoAPI.Debug, hl.ExchangeAPI.Debug)
 	}
+	savedAddress := hl.AccountAddress()
 	newAddress := "0x1234567890"
 	hl.SetAccountAddress(newAddress)
 	if hl.InfoAPI.AccountAddress() != newAddress {
-		t.Errorf("AccountAddress = %v, want %v", hl.InfoAPI.AccountAddress(), newAddress)
+		t.Errorf("InfoAPI.AccountAddress = %v, want %v", hl.InfoAPI.AccountAddress(), newAddress)
 	}
 	if hl.ExchangeAPI.AccountAddress() != newAddress {
-		t.Errorf("AccountAddress = %v, want %v", hl.ExchangeAPI.AccountAddress(), newAddress)
+		t.Errorf("ExchangeAPI.AccountAddress = %v, want %v", hl.ExchangeAPI.AccountAddress(), newAddress)
 	}
 	if hl.AccountAddress() != newAddress {
-		t.Errorf("AccountAddress = %v, want %v", hl.AccountAddress(), newAddress)
+		t.Errorf("gl.AccountAddress = %v, want %v", hl.AccountAddress(), newAddress)
 	}
-	if hl.infoAPI.AccountAddress() != newAddress {
-		t.Errorf("AccountAddress = %v, want %v", hl.infoAPI.AccountAddress(), newAddress)
-	}
+	hl.SetAccountAddress(savedAddress)
 }
 
 func TestHyperliquid_MakeSomeTradingLogic(t *testing.T) {
@@ -114,11 +119,25 @@ func TestHyperliquid_MakeSomeTradingLogic(t *testing.T) {
 	t.Logf("GetAccountState(): %v", res9)
 }
 
-func TestHyperliquid_MakeOrder(t *testing.T) {
+func TestHyperliquid_MarketOrder(t *testing.T) {
 	client := GetHyperliquidAPI()
-	order, err := client.MarketOrder("ADA", 15, nil)
+	order, err := client.MarketOrder("ADA", 100, nil)
 	if err != nil {
 		t.Errorf("Error: %v", err)
 	}
-	t.Logf("MarketOrder(ADA, 15, nil): %+v", order)
+	t.Logf("MarketOrder(ADA, 100, nil): %+v", order)
+}
+
+func TestHyperliquid_LimitOrder(t *testing.T) {
+	client := GetHyperliquidAPI()
+	order1, err := client.LimitOrder(TifGtc, "BTC", 0.01, 70000, false)
+	if err != nil {
+		t.Errorf("Error: %v", err)
+	}
+	t.Logf("LimitOrder(TifGtc, BTC, 0.01, 70000, false): %+v", order1)
+	order2, err := client.LimitOrder(TifGtc, "BTC", -0.01, 120000, false)
+	if err != nil {
+		t.Errorf("Error: %v", err)
+	}
+	t.Logf("LimitOrder(TifGtc, BTC, -0.01, 120000, false): %+v", order2)
 }
