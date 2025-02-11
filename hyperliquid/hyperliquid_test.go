@@ -2,6 +2,7 @@ package hyperliquid
 
 import (
 	"os"
+	"sync"
 	"testing"
 )
 
@@ -140,4 +141,21 @@ func TestHyperliquid_LimitOrder(t *testing.T) {
 		t.Errorf("Error: %v", err)
 	}
 	t.Logf("LimitOrder(TifGtc, BTC, -0.01, 120000, false): %+v", order2)
+}
+
+func TestHyperliquid_GoLimitOrders(t *testing.T) {
+	client := GetHyperliquidAPI()
+	wg := &sync.WaitGroup{}
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(wg *sync.WaitGroup) {
+			defer wg.Done()
+			order, err := client.LimitOrder(TifGtc, "BTC", 0.001, 60000, false)
+			if err != nil {
+				t.Errorf("Error: %v", err)
+			}
+			t.Logf("LimitOrder(TifGtc, BTC, 0.01, 70000, false): %+v", order)
+		}(wg)
+	}
+	wg.Wait()
 }
