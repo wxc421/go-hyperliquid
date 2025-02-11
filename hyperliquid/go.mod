@@ -3,7 +3,7 @@ module github.com/Logarithm-Labs/go-hyperliquid/hyperliquid
 go 1.23.4
 
 require (
-	github.com/ethereum/go-ethereum v1.14.12
+	github.com/ethereum/go-ethereum v1.14.13
 	github.com/sirupsen/logrus v1.9.3
 	github.com/vmihailenco/msgpack/v5 v5.4.1
 )
