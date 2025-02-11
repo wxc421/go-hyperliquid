@@ -51,9 +51,9 @@ func (client *Client) KeyManager() *PKeyManager {
 // getAPIURL returns the API URL based on the network type.
 func getURL(isMainnet bool) string {
 	if isMainnet {
-		return "https://api.hyperliquid.xyz"
+		return MAINNET_API_URL
 	} else {
-		return "https://api.hyperliquid-testnet.xyz"
+		return TESTNET_API_URL
 	}
 }
 
@@ -65,6 +65,7 @@ func NewClient(isMainnet bool) *Client {
 		PadLevelText:  true,
 	})
 	logger.SetOutput(os.Stdout)
+	logger.SetLevel(log.DebugLevel)
 	return &Client{
 		baseUrl:        getURL(isMainnet),
 		httpClient:     http.DefaultClient,
@@ -80,7 +81,7 @@ func NewClient(isMainnet bool) *Client {
 // debug prints the debug messages.
 func (client *Client) debug(format string, v ...interface{}) {
 	if client.Debug {
-		client.Logger.Printf(format, v...)
+		client.Logger.Debugf(format, v...)
 	}
 }
 

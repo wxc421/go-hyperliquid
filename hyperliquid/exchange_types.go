@@ -1,5 +1,10 @@
 package hyperliquid
 
+import (
+	"encoding/json"
+	"fmt"
+)
+
 type RsvSignature struct {
 	R string `json:"r"`
 	S string `json:"s"`
@@ -129,6 +134,29 @@ type StatusResponse struct {
 	Resting RestingStatus `json:"resting,omitempty"`
 	Filled  FilledStatus  `json:"filled,omitempty"`
 	Error   string        `json:"error,omitempty"`
+	Status  string        `json:"status,omitempty"`
+}
+
+// UnmarshalJSON implements custom unmarshaling for StatusResponse.
+// It first checks if the incoming JSON is a simple string. If so, it assigns the
+// value to the Status field. Otherwise, it unmarshals the JSON into the struct normally.
+func (sr *StatusResponse) UnmarshalJSON(data []byte) error {
+	// Try to unmarshal data as a string.
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		sr.Status = s
+		return nil
+	}
+
+	// Otherwise, unmarshal as a full object.
+	// Use an alias to avoid infinite recursion.
+	type Alias StatusResponse
+	var alias Alias
+	if err := json.Unmarshal(data, &alias); err != nil {
+		return fmt.Errorf("StatusResponse: unable to unmarshal data as string or object: %w", err)
+	}
+	*sr = StatusResponse(alias)
+	return nil
 }
 
 type CancelRequest struct {

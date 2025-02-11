@@ -67,6 +67,10 @@ func NewExchangeAPI(isMainnet bool) *ExchangeAPI {
 	return &api
 }
 
+//
+// Helpers
+//
+
 func (api *ExchangeAPI) Endpoint() string {
 	return api.baseEndpoint
 }
@@ -90,6 +94,204 @@ func (api *ExchangeAPI) SlippagePriceSpot(coin string, isBuy bool, slippage floa
 	}
 	slippagePrice := CalculateSlippage(isBuy, marketPx, slippage)
 	return slippagePrice
+}
+
+// Helper function to get the chain params based on the network type.
+func (api *ExchangeAPI) getChainParams() (string, string) {
+	if api.IsMainnet() {
+		return "0xa4b1", "Mainnet"
+	}
+	return "0x66eee", "Testnet"
+}
+
+// Build bulk orders EIP712 message
+func (api *ExchangeAPI) BuildBulkOrdersEIP712(requests []OrderRequest, grouping Grouping) (apitypes.TypedData, error) {
+	var wires []OrderWire
+	for _, req := range requests {
+		wires = append(wires, OrderRequestToWire(req, api.meta, false))
+	}
+	timestamp := GetNonce()
+	action := OrderWiresToOrderAction(wires, grouping)
+	srequest, err := api.BuildEIP712Message(action, timestamp)
+	if err != nil {
+		api.debug("Error building EIP712 message: %s", err)
+		return apitypes.TypedData{}, err
+	}
+	return SignRequestToEIP712TypedData(srequest), nil
+}
+
+// Build order EIP712 message
+func (api *ExchangeAPI) BuildOrderEIP712(request OrderRequest, grouping Grouping) (apitypes.TypedData, error) {
+	return api.BuildBulkOrdersEIP712([]OrderRequest{request}, grouping)
+}
+
+//
+// Base Methods
+//
+
+// Place orders in bulk
+// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#place-an-order
+func (api *ExchangeAPI) BulkOrders(requests []OrderRequest, grouping Grouping, isSpot bool) (*OrderResponse, error) {
+	var wires []OrderWire
+	var meta map[string]AssetInfo
+	if isSpot {
+		meta = api.spotMeta
+	} else {
+		meta = api.meta
+	}
+	for _, req := range requests {
+		wires = append(wires, OrderRequestToWire(req, meta, isSpot))
+	}
+	timestamp := GetNonce()
+	action := OrderWiresToOrderAction(wires, grouping)
+	v, r, s, err := api.SignL1Action(action, timestamp)
+	if err != nil {
+		api.debug("Error signing L1 action: %s", err)
+		return nil, err
+	}
+	request := ExchangeRequest{
+		Action:       action,
+		Nonce:        timestamp,
+		Signature:    ToTypedSig(r, s, v),
+		VaultAddress: nil,
+	}
+	return MakeUniversalRequest[OrderResponse](api, request)
+}
+
+// Cancel order(s)
+// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#cancel-order-s
+func (api *ExchangeAPI) BulkCancelOrders(cancels []CancelOidWire) (*OrderResponse, error) {
+	timestamp := GetNonce()
+	action := CancelOidOrderAction{
+		Type:    "cancel",
+		Cancels: cancels,
+	}
+	v, r, s, err := api.SignL1Action(action, timestamp)
+	if err != nil {
+		api.debug("Error signing L1 action: %s", err)
+		return nil, err
+	}
+	request := ExchangeRequest{
+		Action:       action,
+		Nonce:        timestamp,
+		Signature:    ToTypedSig(r, s, v),
+		VaultAddress: nil,
+	}
+	return MakeUniversalRequest[OrderResponse](api, request)
+}
+
+// Bulk modify orders
+// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#modify-multiple-orders
+func (api *ExchangeAPI) BulkModifyOrders(modifyRequests []ModifyOrderRequest, isSpot bool) (*OrderResponse, error) {
+	wires := []ModifyOrderWire{}
+
+	for _, req := range modifyRequests {
+		wires = append(wires, ModifyOrderRequestToWire(req, api.meta, isSpot))
+	}
+	action := ModifyOrderAction{
+		Type:     "batchModify",
+		Modifies: wires,
+	}
+
+	timestamp := GetNonce()
+	vVal, rVal, sVal, signErr := api.SignL1Action(action, timestamp)
+	if signErr != nil {
+		return nil, signErr
+	}
+	request := ExchangeRequest{
+		Action:       action,
+		Nonce:        timestamp,
+		Signature:    ToTypedSig(rVal, sVal, vVal),
+		VaultAddress: nil,
+	}
+	return MakeUniversalRequest[OrderResponse](api, request)
+}
+
+// Cancel exact order by Client Order Id
+// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#cancel-order-s-by-cloid
+func (api *ExchangeAPI) CancelOrderByCloid(coin string, clientOID string) (*OrderResponse, error) {
+	timestamp := GetNonce()
+	action := CancelCloidOrderAction{
+		Type: "cancelByCloid",
+		Cancels: []CancelCloidWire{
+			{
+				Asset: api.meta[coin].AssetId,
+				Cloid: clientOID,
+			},
+		},
+	}
+	v, r, s, err := api.SignL1Action(action, timestamp)
+	if err != nil {
+		api.debug("Error signing L1 action: %s", err)
+		return nil, err
+	}
+	request := ExchangeRequest{
+		Action:       action,
+		Nonce:        timestamp,
+		Signature:    ToTypedSig(r, s, v),
+		VaultAddress: nil,
+	}
+	return MakeUniversalRequest[OrderResponse](api, request)
+}
+
+// Update leverage for a coin
+// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#update-leverage
+func (api *ExchangeAPI) UpdateLeverage(coin string, isCross bool, leverage int) (*DefaultExchangeResponse, error) {
+	timestamp := GetNonce()
+	action := UpdateLeverageAction{
+		Type:     "updateLeverage",
+		Asset:    api.meta[coin].AssetId,
+		IsCross:  isCross,
+		Leverage: leverage,
+	}
+	v, r, s, err := api.SignL1Action(action, timestamp)
+	if err != nil {
+		api.debug("Error signing L1 action: %s", err)
+		return nil, err
+	}
+	request := ExchangeRequest{
+		Action:       action,
+		Nonce:        timestamp,
+		Signature:    ToTypedSig(r, s, v),
+		VaultAddress: nil,
+	}
+	return MakeUniversalRequest[DefaultExchangeResponse](api, request)
+}
+
+// Initiate a withdraw request
+// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#initiate-a-withdrawal-request
+func (api *ExchangeAPI) Withdraw(destination string, amount float64) (*WithdrawResponse, error) {
+	nonce := GetNonce()
+	action := WithdrawAction{
+		Type:        "withdraw3",
+		Destination: destination,
+		Amount:      SizeToWire(amount, USDC_SZ_DECIMALS),
+		Time:        nonce,
+	}
+	signatureChainID, chainType := api.getChainParams()
+	action.HyperliquidChain = chainType
+	action.SignatureChainID = signatureChainID
+	v, r, s, err := api.SignWithdrawAction(action)
+	if err != nil {
+		api.debug("Error signing withdraw action: %s", err)
+		return nil, err
+	}
+	request := &ExchangeRequest{
+		Action:       action,
+		Nonce:        nonce,
+		Signature:    ToTypedSig(r, s, v),
+		VaultAddress: nil,
+	}
+	return MakeUniversalRequest[WithdrawResponse](api, request)
+}
+
+//
+// Connectors Methods
+//
+
+// Place single order
+func (api *ExchangeAPI) Order(request OrderRequest, grouping Grouping) (*OrderResponse, error) {
+	return api.BulkOrders([]OrderRequest{request}, grouping, false)
 }
 
 // Open a market order.
@@ -218,124 +420,14 @@ func (api *ExchangeAPI) ClosePosition(coin string) (*OrderResponse, error) {
 	return nil, APIError{Message: fmt.Sprintf("No position found for %s", coin)}
 }
 
-// Place single order
-func (api *ExchangeAPI) Order(request OrderRequest, grouping Grouping) (*OrderResponse, error) {
-	return api.BulkOrders([]OrderRequest{request}, grouping, false)
-}
-
 // OrderSpot places a spot order
 func (api *ExchangeAPI) OrderSpot(request OrderRequest, grouping Grouping) (*OrderResponse, error) {
 	return api.BulkOrders([]OrderRequest{request}, grouping, true)
 }
 
-// Place orders in bulk
-// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#place-an-order
-func (api *ExchangeAPI) BulkOrders(requests []OrderRequest, grouping Grouping, isSpot bool) (*OrderResponse, error) {
-	var wires []OrderWire
-	var meta map[string]AssetInfo
-	if isSpot {
-		meta = api.spotMeta
-	} else {
-		meta = api.meta
-	}
-	for _, req := range requests {
-		wires = append(wires, OrderRequestToWire(req, meta, isSpot))
-	}
-	timestamp := GetNonce()
-	action := OrderWiresToOrderAction(wires, grouping)
-	v, r, s, err := api.SignL1Action(action, timestamp)
-	if err != nil {
-		api.debug("Error signing L1 action: %s", err)
-		return nil, err
-	}
-	request := ExchangeRequest{
-		Action:       action,
-		Nonce:        timestamp,
-		Signature:    ToTypedSig(r, s, v),
-		VaultAddress: nil,
-	}
-	return MakeUniversalRequest[OrderResponse](api, request)
-}
-
-// Cancel order(s)
-// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#cancel-order-s
-func (api *ExchangeAPI) BulkCancelOrders(cancels []CancelOidWire) (*OrderResponse, error) {
-	timestamp := GetNonce()
-	action := CancelOidOrderAction{
-		Type:    "cancel",
-		Cancels: cancels,
-	}
-	v, r, s, err := api.SignL1Action(action, timestamp)
-	if err != nil {
-		api.debug("Error signing L1 action: %s", err)
-		return nil, err
-	}
-	request := ExchangeRequest{
-		Action:       action,
-		Nonce:        timestamp,
-		Signature:    ToTypedSig(r, s, v),
-		VaultAddress: nil,
-	}
-	return MakeUniversalRequest[OrderResponse](api, request)
-}
-
-// Bulk modify orders
-// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#modify-multiple-orders
-func (api *ExchangeAPI) BulkModifyOrders(modifyRequests []ModifyOrderRequest, isSpot bool) (*OrderResponse, error) {
-	wires := []ModifyOrderWire{}
-
-	for _, req := range modifyRequests {
-		wires = append(wires, ModifyOrderRequestToWire(req, api.meta, isSpot))
-	}
-	action := ModifyOrderAction{
-		Type:     "batchModify",
-		Modifies: wires,
-	}
-
-	timestamp := GetNonce()
-	vVal, rVal, sVal, signErr := api.SignL1Action(action, timestamp)
-	if signErr != nil {
-		return nil, signErr
-	}
-	request := ExchangeRequest{
-		Action:       action,
-		Nonce:        timestamp,
-		Signature:    ToTypedSig(rVal, sVal, vVal),
-		VaultAddress: nil,
-	}
-	return MakeUniversalRequest[OrderResponse](api, request)
-}
-
 // Cancel exact order by OID
 func (api *ExchangeAPI) CancelOrderByOID(coin string, orderID int64) (*OrderResponse, error) {
 	return api.BulkCancelOrders([]CancelOidWire{{Asset: api.meta[coin].AssetId, Oid: int(orderID)}})
-}
-
-// Cancel exact order by Client Order Id
-// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#cancel-order-s-by-cloid
-func (api *ExchangeAPI) CancelOrderByCloid(coin string, clientOID string) (*OrderResponse, error) {
-	timestamp := GetNonce()
-	action := CancelCloidOrderAction{
-		Type: "cancelByCloid",
-		Cancels: []CancelCloidWire{
-			{
-				Asset: api.meta[coin].AssetId,
-				Cloid: clientOID,
-			},
-		},
-	}
-	v, r, s, err := api.SignL1Action(action, timestamp)
-	if err != nil {
-		api.debug("Error signing L1 action: %s", err)
-		return nil, err
-	}
-	request := ExchangeRequest{
-		Action:       action,
-		Nonce:        timestamp,
-		Signature:    ToTypedSig(r, s, v),
-		VaultAddress: nil,
-	}
-	return MakeUniversalRequest[OrderResponse](api, request)
 }
 
 // Cancel all orders for a given coin
@@ -370,84 +462,4 @@ func (api *ExchangeAPI) CancelAllOrders() (*OrderResponse, error) {
 		cancels = append(cancels, CancelOidWire{Asset: api.meta[order.Coin].AssetId, Oid: int(order.Oid)})
 	}
 	return api.BulkCancelOrders(cancels)
-}
-
-// Update leverage for a coin
-// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#update-leverage
-func (api *ExchangeAPI) UpdateLeverage(coin string, isCross bool, leverage int) (*DefaultExchangeResponse, error) {
-	timestamp := GetNonce()
-	action := UpdateLeverageAction{
-		Type:     "updateLeverage",
-		Asset:    api.meta[coin].AssetId,
-		IsCross:  isCross,
-		Leverage: leverage,
-	}
-	v, r, s, err := api.SignL1Action(action, timestamp)
-	if err != nil {
-		api.debug("Error signing L1 action: %s", err)
-		return nil, err
-	}
-	request := ExchangeRequest{
-		Action:       action,
-		Nonce:        timestamp,
-		Signature:    ToTypedSig(r, s, v),
-		VaultAddress: nil,
-	}
-	return MakeUniversalRequest[DefaultExchangeResponse](api, request)
-}
-
-// Initiate a withdraw request
-// https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/exchange-endpoint#initiate-a-withdrawal-request
-func (api *ExchangeAPI) Withdraw(destination string, amount float64) (*WithdrawResponse, error) {
-	nonce := GetNonce()
-	action := WithdrawAction{
-		Type:        "withdraw3",
-		Destination: destination,
-		Amount:      FloatToWire(amount, PERP_MAX_DECIMALS, SZ_DECIMALS),
-		Time:        nonce,
-	}
-	signatureChainID, chainType := api.getChainParams()
-	action.HyperliquidChain = chainType
-	action.SignatureChainID = signatureChainID
-	v, r, s, err := api.SignWithdrawAction(action)
-	if err != nil {
-		api.debug("Error signing withdraw action: %s", err)
-		return nil, err
-	}
-	request := &ExchangeRequest{
-		Action:       action,
-		Nonce:        nonce,
-		Signature:    ToTypedSig(r, s, v),
-		VaultAddress: nil,
-	}
-	return MakeUniversalRequest[WithdrawResponse](api, request)
-}
-
-// Helper function to get the chain params based on the network type.
-func (api *ExchangeAPI) getChainParams() (string, string) {
-	if api.IsMainnet() {
-		return "0xa4b1", "Mainnet"
-	}
-	return "0x66eee", "Testnet"
-}
-
-// Build bulk orders EIP712 message
-func (api *ExchangeAPI) BuildBulkOrdersEIP712(requests []OrderRequest, grouping Grouping) (apitypes.TypedData, error) {
-	var wires []OrderWire
-	for _, req := range requests {
-		wires = append(wires, OrderRequestToWire(req, api.meta, false))
-	}
-	timestamp := GetNonce()
-	action := OrderWiresToOrderAction(wires, grouping)
-	srequest, err := api.BuildEIP712Message(action, timestamp)
-	if err != nil {
-		api.debug("Error building EIP712 message: %s", err)
-		return apitypes.TypedData{}, err
-	}
-	return SignRequestToEIP712TypedData(srequest), nil
-}
-
-// Build order EIP712 message
-func (api *ExchangeAPI) BuildOrderEIP712(request OrderRequest, grouping Grouping) (apitypes.TypedData, error) {
-	return api.BuildBulkOrdersEIP712([]OrderRequest{request}, grouping)
 }
