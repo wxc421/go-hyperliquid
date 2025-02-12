@@ -1,7 +1,8 @@
 # go-hyperliquid
- A golang SDK for [Hyperliquid PerpDEX](https://hyperliquid.xyz/).
+ A golang SDK for Hyperliquid API.
 
 # API reference
+- [Hyperliquid](https://app.hyperliquid.xyz/)
 - [Hyperliquid API docs](https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api)
 - [Hyperliquid official Python SDK](https://github.com/hyperliquid-dex/hyperliquid-python-sdk)
 
