@@ -463,3 +463,159 @@ func (api *ExchangeAPI) CancelAllOrders() (*OrderResponse, error) {
 	}
 	return api.BulkCancelOrders(cancels)
 }
+
+// CreateUnsignedOrder creates an unsigned order request
+// Similar to MarketOrder and LimitOrder, but returns the unsigned request instead of sending it
+func (api *ExchangeAPI) CreateUnsignedOrder(coin string, size float64, price float64, orderType string, reduceOnly bool, isSpot bool) (*ExchangeRequest, error) {
+	// 构建订单类型
+	var orderTypeObj OrderType
+	if orderType == TifGtc || orderType == TifIoc || orderType == TifAlo {
+		orderTypeObj = OrderType{
+			Limit: &LimitOrderType{
+				Tif: orderType,
+			},
+		}
+	} else {
+		return nil, APIError{Message: fmt.Sprintf("Invalid order type: %s. Available types: %s, %s, %s", orderType, TifGtc, TifIoc, TifAlo)}
+	}
+
+	// 构建订单请求
+	request := OrderRequest{
+		Coin:       coin,
+		IsBuy:      IsBuy(size),
+		Sz:         math.Abs(size),
+		LimitPx:    price,
+		OrderType:  orderTypeObj,
+		ReduceOnly: reduceOnly,
+	}
+
+	// 转换为订单线
+	var wires []OrderWire
+	var meta map[string]AssetInfo
+	if isSpot {
+		meta = api.spotMeta
+	} else {
+		meta = api.meta
+	}
+	wires = append(wires, OrderRequestToWire(request, meta, isSpot))
+
+	// 创建订单动作
+	timestamp := GetNonce()
+	action := OrderWiresToOrderAction(wires, GroupingNa)
+
+	return &ExchangeRequest{
+		Action:       action,
+		Nonce:        timestamp,
+		VaultAddress: nil,
+	}, nil
+}
+
+func (api *ExchangeAPI) SignOrder(unsignedRequest *ExchangeRequest) (*ExchangeRequest, error) {
+	v, r, s, err := api.SignL1Action(unsignedRequest.Action, unsignedRequest.Nonce)
+	if err != nil {
+		api.debug("Error signing L1 action: %s", err)
+		return nil, err
+	}
+
+	signedRequest := *unsignedRequest
+	signedRequest.Signature = ToTypedSig(r, s, v)
+	return &signedRequest, nil
+}
+
+func (api *ExchangeAPI) SendSignedOrder(signedRequest *ExchangeRequest) (*OrderResponse, error) {
+	return MakeUniversalRequest[OrderResponse](api, *signedRequest)
+}
+
+// CreateUnsignedMarketOrder creates an unsigned market order request
+func (api *ExchangeAPI) CreateUnsignedMarketOrder(coin string, size float64, slippage *float64, isSpot bool) (*ExchangeRequest, error) {
+	slpg := GetSlippage(slippage)
+	isBuy := IsBuy(size)
+	var finalPx float64
+	if isSpot {
+		finalPx = api.SlippagePriceSpot(coin, isBuy, slpg)
+	} else {
+		finalPx = api.SlippagePrice(coin, isBuy, slpg)
+	}
+
+	// 构建订单类型
+	orderTypeObj := OrderType{
+		Limit: &LimitOrderType{
+			Tif: TifIoc,
+		},
+	}
+
+	// 构建订单请求
+	request := OrderRequest{
+		Coin:       coin,
+		IsBuy:      isBuy,
+		Sz:         math.Abs(size),
+		LimitPx:    finalPx,
+		OrderType:  orderTypeObj,
+		ReduceOnly: false,
+	}
+
+	// 转换为订单线
+	var wires []OrderWire
+	var meta map[string]AssetInfo
+	if isSpot {
+		meta = api.spotMeta
+	} else {
+		meta = api.meta
+	}
+	wires = append(wires, OrderRequestToWire(request, meta, isSpot))
+
+	// 创建订单动作
+	timestamp := GetNonce()
+	action := OrderWiresToOrderAction(wires, GroupingNa)
+
+	return &ExchangeRequest{
+		Action:       action,
+		Nonce:        timestamp,
+		VaultAddress: nil,
+	}, nil
+}
+
+// CreateUnsignedLimitOrder creates an unsigned limit order request
+func (api *ExchangeAPI) CreateUnsignedLimitOrder(coin string, size float64, price float64, orderType string, reduceOnly bool, isSpot bool) (*ExchangeRequest, error) {
+	// 检查订单类型是否有效
+	if orderType != TifGtc && orderType != TifIoc && orderType != TifAlo {
+		return nil, APIError{Message: fmt.Sprintf("Invalid order type: %s. Available types: %s, %s, %s", orderType, TifGtc, TifIoc, TifAlo)}
+	}
+
+	// 构建订单类型
+	orderTypeObj := OrderType{
+		Limit: &LimitOrderType{
+			Tif: orderType,
+		},
+	}
+
+	// 构建订单请求
+	request := OrderRequest{
+		Coin:       coin,
+		IsBuy:      IsBuy(size),
+		Sz:         math.Abs(size),
+		LimitPx:    price,
+		OrderType:  orderTypeObj,
+		ReduceOnly: reduceOnly,
+	}
+
+	// 转换为订单线
+	var wires []OrderWire
+	var meta map[string]AssetInfo
+	if isSpot {
+		meta = api.spotMeta
+	} else {
+		meta = api.meta
+	}
+	wires = append(wires, OrderRequestToWire(request, meta, isSpot))
+
+	// 创建订单动作
+	timestamp := GetNonce()
+	action := OrderWiresToOrderAction(wires, GroupingNa)
+
+	return &ExchangeRequest{
+		Action:       action,
+		Nonce:        timestamp,
+		VaultAddress: nil,
+	}, nil
+}
