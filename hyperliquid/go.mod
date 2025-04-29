@@ -1,4 +1,4 @@
-module github.com/Logarithm-Labs/go-hyperliquid/hyperliquid
+module github.com/wxc421/go-hyperliquid/hyperliquid
 
 go 1.23.4
 
